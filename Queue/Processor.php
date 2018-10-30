@@ -15,6 +15,7 @@ use Piwik\Tracker\RequestSet;
 use Piwik\Plugins\QueuedTracking\Queue;
 use Piwik\Plugins\QueuedTracking\Queue\Processor\Handler;
 use Exception;
+use Piwik\Config;
 
 /**
  * Processes all queued tracking requests. You need to acquire a lock before calling process() and unlock it afterwards!
@@ -178,9 +179,33 @@ class Processor
             return array();
         }
 
-        $this->handler->init($tracker);
+        // this was originally where the tracker was initialized and db connected (if not already connected)
+        // $this->handler->init($tracker);
 
         foreach ($queuedRequestSets as $index => $requestSet) {
+            // NACHO ESPECIAL
+            // trying to check for a database override prior to processing the requests in the set.
+            if(!is_null($requestSet->getDbHost()) && !is_null($requestSet->getDbName())) {
+                Config::getInstance()->database["host"] = $requestSet->getDbHost();
+                Config::getInstance()->database["dbname"] = $requestSet->getDbName();
+                Config::getInstance()->database["username"] = getenv("MatomoDBUser");
+                Config::getInstance()->database["password"] = getenv("MatomoDBPass");
+            }
+
+            // may need to disconnect before initializing the handler, that way it will reconnect with the settings from the request
+            if ($tracker->isDatabaseConnected()) {
+                $matches = array();
+                preg_match('/dbname=(.*?);host=(.*?);/', $tracker->getDatabase()->getDsn(), $matches);
+                $name = $matches[1];
+                $host = $matches[2];
+                if ($name != $requestSet->getDbName() || $host != $requestSet->getDbHost()) {
+                    $tracker->disconnectDatabase();
+                }
+            }
+
+            // init tracker and establish db connection
+            $this->handler->init($tracker);
+
             if (!$this->extendLockExpireToMakeSureWeCanProcessARequestSet($requestSet)) {
                 $this->forceRollbackAndThrowExceptionAsAnotherProcessMightProcessSameRequestSets($tracker, 'processing');
             }
