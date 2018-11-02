@@ -40,7 +40,7 @@ class Lock
         return $this->backend->getKeysMatchingPattern($this->lockKeyStart . '*');
     }
 
-    public function acquireLock($id)
+    public function acquireLock($id, $manager)
     {
         $this->lockKey = $this->lockKeyStart . $id;
 
@@ -49,6 +49,8 @@ class Lock
 
         if ($locked) {
             $this->lockValue = $lockValue;
+            //now increment local worker count
+            $manager->addLocalLocks(1);
         }
 
         return $locked;
@@ -63,11 +65,14 @@ class Lock
         return $this->lockValue === $this->backend->get($this->lockKey);
     }
 
-    public function unlock()
+    public function unlock($manager)
     {
         if ($this->lockValue) {
             $this->backend->deleteIfKeyHasValue($this->lockKey, $this->lockValue);
             $this->lockValue = null;
+
+            //now decrement local worker count
+            $manager->addLocalLocks(-1);
         }
     }
 

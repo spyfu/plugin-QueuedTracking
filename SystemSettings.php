@@ -11,6 +11,7 @@ namespace Piwik\Plugins\QueuedTracking;
 use Piwik\Cache;
 use Piwik\Config;
 use Piwik\Plugins\QueuedTracking\Settings\NumWorkers;
+use Piwik\Plugins\QueuedTracking\Settings\NumTotalQueues;
 use Piwik\Settings\Setting;
 use Piwik\Settings\FieldConfig;
 use Piwik\Settings\Storage\Backend;
@@ -47,6 +48,9 @@ class SystemSettings extends \Piwik\Settings\Plugin\SystemSettings
     /** @var NumWorkers */
     public $numQueueWorkers;
 
+    /** @var NumTotalQueues */
+    public $numTotalQueues;
+
     /** @var Setting */
     public $processDuringTrackingRequest;
 
@@ -71,6 +75,7 @@ class SystemSettings extends \Piwik\Settings\Plugin\SystemSettings
         $this->redisPassword = $this->createRedisPasswordSetting();
         $this->queueEnabled = $this->createQueueEnabledSetting();
         $this->numQueueWorkers = $this->createNumberOfQueueWorkerSetting();
+        $this->numTotalQueues = $this->createNumberOfTotalQueuesSetting();
         $this->numRequestsToProcess = $this->createNumRequestsToProcessSetting();
         $this->processDuringTrackingRequest = $this->createProcessInTrackingRequestSetting();
     }
@@ -203,7 +208,7 @@ class SystemSettings extends \Piwik\Settings\Plugin\SystemSettings
             $field->title = 'Number of queue workers';
             $field->uiControl = FieldConfig::UI_CONTROL_TEXT;
             $field->uiControlAttributes = array('size' => 5);
-            $field->inlineHelp = 'Number of allowed maximum queue workers. Accepts a number between 1 and 16. Best practice is to set the number of CPUs you want to make available for queue processing. Be aware you need to make sure to start the workers manually. We recommend to not use 9-15 workers, rather use 8 or 16 as the queue might not be distributed evenly into different queues. DO NOT USE more than 1 worker if you make use the UserId feature when tracking see https://github.com/piwik/piwik/issues/7691';
+            $field->inlineHelp = 'Number of allowed maximum queue workers. Number must be greater than 0. Best practice is to set the number of CPUs you want to make available for queue processing. Be aware you need to make sure to start the workers manually. We recommend to not use 9-15 workers, rather use 8 or 16 as the queue might not be distributed evenly into different queues. DO NOT USE more than 1 worker if you make use the UserId feature when tracking see https://github.com/piwik/piwik/issues/7691';
             $field->validate = function ($value) {
 
                 if (!is_numeric($value)) {
@@ -211,8 +216,8 @@ class SystemSettings extends \Piwik\Settings\Plugin\SystemSettings
                 }
 
                 $value = (int) $value;
-                if ($value > 16 || $value < 1) {
-                    throw new \Exception('Only 1-16 workers allowed');
+                if ($value < 1) {
+                    throw new \Exception('Number must be greater than 0');
                 }
             };
         });
@@ -220,6 +225,32 @@ class SystemSettings extends \Piwik\Settings\Plugin\SystemSettings
         $this->addSetting($numQueueWorkers);
 
         return $numQueueWorkers;
+    }
+
+    private function createNumberOfTotalQueuesSetting()
+    {
+        $numTotalQueues = new NumTotalQueues('numTotalQueues', $default = 1, FieldConfig::TYPE_INT, $this->pluginName);
+        $numTotalQueues->setConfigureCallback(function (FieldConfig $field) {
+            $field->title = 'Number of total queues';
+            $field->uiControl = FieldConfig::UI_CONTROL_TEXT;
+            $field->uiControlAttributes = array('size' => 5);
+            $field->inlineHelp = 'Number of total queues. Number must be greater than 0.';
+            $field->validate = function ($value) {
+
+                if (!is_numeric($value)) {
+                    throw new \Exception('Number of total queues should be an integer, eg "6"');
+                }
+
+                $value = (int) $value;
+                if ($value < 1) {
+                    throw new \Exception('Number must be greater than 0');
+                }
+            };
+        });
+
+        $this->addSetting($numTotalQueues);
+
+        return $numTotalQueues;
     }
 
     private function createRedisPasswordSetting()
@@ -415,14 +446,14 @@ class SystemSettings extends \Piwik\Settings\Plugin\SystemSettings
 
         parent::save();
 
-        $oldNumWorkers = $this->numQueueWorkers->getOldValue();
-        $newNumWorkers = $this->numQueueWorkers->getValue();
+        $oldTotalQueues = $this->numTotalQueues->getOldValue();
+        $newTotalQueues = $this->numTotalQueues->getValue();
 
-        if ($newNumWorkers && $oldNumWorkers) {
+        if ($newTotalQueues && $oldTotalQueues) {
             try {
                 $manager = Factory::makeQueueManager(Factory::makeBackend());
-                $manager->setNumberOfAvailableQueues($newNumWorkers);
-                $manager->moveSomeQueuesIfNeeded($newNumWorkers, $oldNumWorkers);
+                $manager->setNumberOfAvailableQueues($newTotalQueues);
+                $manager->moveSomeQueuesIfNeeded($newTotalQueues, $oldTotalQueues);
             } catch (\Exception $e) {
                 // it is ok if this fails. then it is most likely not enabled etc.
             }

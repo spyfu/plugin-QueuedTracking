@@ -61,6 +61,7 @@ class Test extends ConsoleCommand
         $output->writeln('<comment>Settings that will be used:</comment>');
         $output->writeln('Backend: ' .  $settings->backend->getValue());
         $output->writeln('NumQueueWorkers: ' . $settings->numQueueWorkers->getValue());
+        $output->writeln('NumTotalQueues: ' . $settings->numTotalQueues->getValue());
         $output->writeln('NumRequestsToProcess: ' . $settings->numRequestsToProcess->getValue());
         $output->writeln('ProcessDuringTrackingRequest: ' . (int) $settings->processDuringTrackingRequest->getValue());
         $output->writeln('QueueEnabled: ' . (int) $settings->queueEnabled->getValue());

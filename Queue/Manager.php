@@ -37,6 +37,8 @@ class Manager
 
     private $forceQueueId;
 
+    private $numberOfLocalLocks = 0;
+
     /**
      * This mapping makes sure we move requests more evenly into different queues. Eg if we would do a
      * ord($firstLetter) instead of this mapping, and have 4 workers, we would move the following characters:
@@ -86,16 +88,27 @@ class Manager
         return $this->numQueuesAvailable;
     }
 
-    public function moveSomeQueuesIfNeeded($newNumberOfAvailableWorkers, $oldNumberOfAvailableWorkers)
+    public function addLocalLocks($numToAdd)
     {
-        if ($newNumberOfAvailableWorkers >= $oldNumberOfAvailableWorkers) {
+        $currentLockCount = (int) $this->numberOfLocalLocks;
+        $this->numberOfLocalLocks = $currentLockCount + (int) $numToAdd;
+    }
+
+    public function getNumberOfLocalLocks()
+    {
+        return $this->numberOfLocalLocks;
+    }
+
+    public function moveSomeQueuesIfNeeded($newNumberOfTotalQueues, $oldNumberOfTotalQueues)
+    {
+        if ($newNumberOfTotalQueues >= $oldNumberOfTotalQueues) {
             // not needed to move requests into another queue
             return false;
         }
 
-        $queueIdsToMove = range($newNumberOfAvailableWorkers, $oldNumberOfAvailableWorkers);
+        $queueIdsToMove = range($newNumberOfTotalQueues, $oldNumberOfTotalQueues);
 
-        $this->setNumberOfAvailableQueues($newNumberOfAvailableWorkers);
+        $this->setNumberOfAvailableQueues($newNumberOfTotalQueues);
         $this->moveRequestsIntoAnotherQueue($queueIdsToMove);
 
         return true;
@@ -226,7 +239,8 @@ class Manager
 
     public function canAcquireMoreLocks()
     {
-        return $this->lock->getNumberOfAcquiredLocks() < $this->numQueuesAvailable;
+        $numberOfLocks = $this->lock->getNumberOfAcquiredLocks();
+        return ($numberOfLocks < $this->numQueuesAvailable && $this->numberOfLocalLocks < $this->numQueueWorkers);
     }
 
     private function getRandomQueueId()
@@ -258,7 +272,7 @@ class Manager
 
             $shouldProcess = $queue->shouldProcess();
 
-            if ($shouldProcess && $this->lock->acquireLock($this->forceQueueId)) {
+            if ($shouldProcess && $this->lock->acquireLock($this->forceQueueId, $this)) {
                 return $queue;
             }
             
@@ -282,7 +296,7 @@ class Manager
 
             $shouldProcess = $queue->shouldProcess();
 
-            if ($shouldProcess && $this->lock->acquireLock($this->currentQueueId)) {
+            if ($shouldProcess && $this->lock->acquireLock($this->currentQueueId, $this)) {
                 return $queue;
             }
         }
@@ -290,7 +304,7 @@ class Manager
 
     public function unlock()
     {
-        $this->lock->unlock();
+        $this->lock->unlock($this);
     }
 
     public function expireLock($ttlInSeconds)

@@ -32,7 +32,7 @@ class Factory
 
         $lock    = self::makeLock($backend);
         $manager = new Manager($backend, $lock);
-        $manager->setNumberOfAvailableQueues($settings->numQueueWorkers->getValue());
+        $manager->setNumberOfAvailableQueues($settings->numTotalQueues->getValue());
         $manager->setNumberOfRequestsToProcessAtSameTime($settings->numRequestsToProcess->getValue());
 
         return $manager;
