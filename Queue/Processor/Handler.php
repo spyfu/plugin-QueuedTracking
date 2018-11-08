@@ -10,6 +10,7 @@
 namespace Piwik\Plugins\QueuedTracking\Queue\Processor;
 
 use Piwik\Common;
+// use Piwik\Db;
 use Piwik\Exception\UnexpectedWebsiteFoundException;
 use Piwik\Tracker;
 use Piwik\Plugins\QueuedTracking\Queue;
@@ -34,6 +35,9 @@ class Handler
         $this->hasError = false;
         $this->numTrackedRequestsBeginning = $tracker->getCountOfLoggedRequests();
         $this->transactionId = $this->getDb()->beginTransaction();
+        // Nacho, test reducing locking for QueuedTracking
+        $db = $this->getDb();
+        $db->query("SET SESSION tx_isolation = 'READ-COMMITTED'");
     }
 
     public function process(Tracker $tracker, RequestSet $requestSet)
